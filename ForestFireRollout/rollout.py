@@ -878,6 +878,7 @@ class Experiment():
         Experiment.check_dir("Runs")
         time_s = Experiment.time_str()
         if RUN and (self.theres_run_gif):
+            print("Creating gif for runs. This may take a while.")
             imageio.mimsave("./Runs/Helicopter Rollout Run alpha-{} epsilon-{} epsilon_decay-{} k-{} LH-{} n_samples-{} -- {}.gif".format(
                 self.alpha, self.epsilon_op, self.epsilon_decay, self.K, self.N_SAMPLES, self.LOOKAHEAD, time_s), 
                 self.frames_run_r, fps=fps)
@@ -889,12 +890,15 @@ class Experiment():
                 self.frames_run_h, fps=fps)
             self.frames_run_h = []
             self.theres_run_gif = False
+            print("Run gif. Done!")
         if TEST and self.theres_test_gif:
+            print("Creating gif for tests. This may take a while.")
             imageio.mimsave("./Runs/Helicopter Rollout Test alpha-{} epsilon-{} epsilon_decay-{} k-{} LH-{} n_samples-{} -- {}.gif".format(
-                self.alpha, self.epsilon_op, self.epsilon_decay, self.K, self.N_SAMPLES, self.LOOKAHEAD, time_s),
+                self.alpha, self.epsilon_op, self.epsilon_decay, self.K, self.LOOKAHEAD, self.N_SAMPLES, time_s),
                 self.frames_test_r, fps=fps)
             self.frames_test_r = []
             self.theres_test_gif = False
+            print("Test gif. Done!")
         return None
 
     @staticmethod
@@ -906,4 +910,5 @@ class Experiment():
         assert isinstance(dir, str), "dir argument must be a string"
         ls = os.listdir(os.getcwd())
         if not dir in ls:
+            print("Creating a folder ./Runs")
             os.mkdir(dir)

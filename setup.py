@@ -13,5 +13,10 @@ setup(name='gym_forest_fire',
       install_requires=['gym',
                         'numpy',
                         'matplotlib',
-                        'seaborn']
+                        'seaborn',
+                        'cython',
+                        'imageio',
+                        'tdqm',
+                        'math',
+                        ]
 )
