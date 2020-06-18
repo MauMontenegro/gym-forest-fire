@@ -6,8 +6,29 @@ class R_ITER():
     """Class for to save a bit of space in creation of iterables with repeated items
     for a iterable object where just the action variable changes, iterating from the
     Action_set.
-    Environment must have a .copy() method"""
-    def __init__(self, env, H, N_workers, alpha, K, lookahead, N_samples, Action_set=None, H_args=None, Min_obj=True):
+
+    Parameters
+    ----------
+    env: Class or object to environment
+        Environment must have a .copy() method
+    H : ref to class or function for the heuristic
+    N_workers : int
+        Expected number of workers to have, this is needed here to make all the trayectories
+        needed to sample somehow distributed uniformly as possible among the workers.
+    alpha: float
+    K : int
+    lookahead : int
+    N_samples : int
+    Action_set : list or set
+        It can be none if the environment provides it with as env.action_set
+    H_args : dict
+        Extra arguments to pass the Heuristic
+    Min_obj : bool
+        If one wants the sampler to compare the costs with minimization or maximization
+    """
+    
+    def __init__(self, env, H, N_workers, alpha, K, lookahead, 
+                N_samples, Action_set=None, H_args=None, Min_obj=True):
         self.env = env
         self.H_ref = H
         self.Min_obj = Min_obj
@@ -30,30 +51,28 @@ class R_ITER():
             self.t_pos += [0]
             self.max_index += [self.actions_c - 1]
         self.t_pos[self.lookahead - 1] = -1 # A quick fix.
-        self.state = True
 
     def __iter__(self):
         # iterable method
+        for j in range(len(self.t_pos)):
+            self.t_pos[j] = 0
+        self.t_pos[self.lookahead - 1] = -1 # A quick fix.
+        self.j = self.lookahead - 1
         return self
 
     def __next__(self):
-        if not self.state:
-            raise StopIteration
-        # iterating through the object
         chunck_trayectories = []
         for _ in range(self.chuncks):
             branch = []
-            self.state = self._update_iter_()
-            if not self.state:
-                break
+            self._update_iter_()
             for pos in self.t_pos:
                 branch += [self.actions[pos]]
-            chunck_trayectories += [branch]
+            chunck_trayectories += [branch.copy()]
 
         To_H = {
                 'env': self.env.copy(), # Always a new copy of the environment. This is a new object.
                 'H':self.H_ref,
-                'trayectories':chunck_trayectories,
+                'trayectories':chunck_trayectories.copy(),
                 'alpha':self.alpha,
                 'K':self.K,
                 'N_SAMPLES':self.N_samples,
@@ -69,19 +88,17 @@ class R_ITER():
         # A recursive counter
         if self.j < 0:
             # Done
-            return False
+            raise StopIteration
         elif self.t_pos[self.j] < self.max_index[self.j]:
             # This case is when there are still branches to 
             # visit in this level
             self.t_pos[self.j] += 1
             self.j = self.lookahead - 1
-            # End of update
-            return True
+            return None
         else:
             self.t_pos[self.j] = 0
             self.j -= 1
-            return self._update_iter_()
-            
+            return None
 
 def sample_trayectory(args):
     """
@@ -121,9 +138,9 @@ def sample_trayectory(args):
 
     trayectories = args['trayectories']
     l_trayectories = len(trayectories)
+    assert l_trayectories > 0, "This function should not sample empty trayectories. Please check your inputs."
     l_trayectory = len(trayectories[0])
-    assert l_trayectory > 0, "This function should not sample empty trayectories. Please check your inputs."
-    
+
     H = args['H']
     H_args = args['H_args'] #Dictionary of aditional args to the H
     To_H = dict()
