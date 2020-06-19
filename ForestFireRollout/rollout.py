@@ -20,6 +20,8 @@ import tqdm
 import time
 import matplotlib.pyplot as plt
 import imageio
+import pickle
+import re
 
 #Importing the sampler
 from rollout_sampler import sample_trayectory, R_ITER
@@ -150,9 +152,10 @@ class Policy(object):
     #Actual state of Policy        
     def __repr__(self):
         s = "Policy with {0} states \n |".format(self.keys)
-        for key in self.policy.keys():
-            s += "\n |-- State {0} controls:{1}".format(key, self.policy[key][0])
-            s += "\n |                       '-- Control objective {}".format(self.policy[key][0][self.policy[key][4]])
+        for i,key in enumerate(self.policy.keys()):
+            s += "\n |-- State {0} controls:{1}".format(i, self.policy[key][0])
+            s += "\n |     '-- Control objective {}".format(self.policy[key][0][self.policy[key][4]])
+        s +="\n |\nEnd Policy\n"
         return s
 
     def __del__(self):
@@ -476,6 +479,9 @@ class Experiment():
         self.epsilon = check_prob(EPSILON)
         self.epsilon_decay = check_prob(EPSILON_DECAY)
 
+        self.init_logger = False
+        self.init_logger = self.logger("Logger initialized.",False) 
+
         # This class has its own random generator.
         self.rg = np.random.Generator(np.random.SFC64())
         self.runs_rollout_results = []
@@ -498,14 +504,15 @@ class Experiment():
         elif N_WORKERS == -1:
             self.cpus = cpu_sys # ALL YOUR BASE ARE BELONG TO US, with SMT by default
         elif N_WORKERS < 0 or N_WORKERS > cpu_sys:
-            print("N_WORKERS = {} is not valid. The computer has up to {} threads only.".format(N_WORKERS, cpu_sys))
+            self.logger("N_WORKERS = {} is not valid. The computer has up to {} threads only.".format(N_WORKERS, cpu_sys))
             self.cpus = cpu_sys // 2  # half of thread given, bye SMT
         else:
             self.cpus = N_WORKERS
-        print("Assigning {} threads of the CPU for experiment workers.".format(self.cpus))
+        self.logger("Assigning {} threads of the CPU for experiment workers.".format(self.cpus))
     
     def __del__(self):
-        print("The experiment is OVER!")
+        self.logger("The experiment is OVER!")
+        self.logfile.close()
         del self.env_h
         del self.env
         del self.PI
@@ -530,12 +537,12 @@ class Experiment():
             RUN_GIF = GIF
         else:
             RUN_GIF = self.RUN_GIF
-        print("Run {} - Metadata: alpha-{} epsilon-{} epsilon_decay-{} k-{} LH-{} n_samples-{}".format(
-            self.c_runs, self.alpha, self.epsilon_op, self.epsilon_decay, self.K, self.LOOKAHEAD, self.N_SAMPLES))
-        print(" |")
+        self.logger("Run {} - Metadata: alpha-{} epsilon-{} epsilon_decay-{} k-{} LH-{} n_samples-{}".format(
+            self.c_runs, self.alpha, self.epsilon_op, self.epsilon_decay, self.K, self.LOOKAHEAD, self.N_SAMPLES), time=False)
+        self.logger(" |")
         # Reseting env and storing the initial observations
         observation = self.env.reset()
-        observation_1 = observation
+        observation_h = observation
         #Making copy of the env to apply the heuristic
         self.env_h = self.env.copy()
         # Making checkpoints
@@ -549,8 +556,16 @@ class Experiment():
         # Measuring time of execution. 
         start = time.time()
         # First loop to execute an rollout experiment.
-        for n_test in range(self.N_TRAIN):        
-            print(" |-- Test : {} of {}".format(n_test+1, self.N_TRAIN))
+        for n_test in range(self.N_TRAIN):
+            # In order to compare the advance between the two environments
+            # their random generator is reseeded with the same seed.
+            # This ones should advance equally on the all the run, but the samples
+            # as they are copies they generate a new random gen, so the samples wont suffer
+            # from this
+            M_SEED = int(self.rg.random()*10**4)
+            self.env.rg = np.random.Generator(np.random.SFC64(M_SEED))
+            self.env_h.rg = np.random.Generator(np.random.SFC64(M_SEED))    
+            self.logger(" |-- Test : {} of {}".format(n_test+1, self.N_TRAIN))
             # Making a checkpoint from the initial state generated.         
             self.env.load_checkpoint(checkpoint_env)
             self.env_h.load_checkpoint(checkpoint_env_h)
@@ -581,13 +596,13 @@ class Experiment():
                 #Calls Heuristic and return best action
                 To_H = self.H_args.copy()
                 To_H['env'] = self.env_h
-                To_H['observation'] = observation_1
+                To_H['observation'] = observation_h
                 h_action = self.H(To_H)
                 #Update Policy        
                 self.PI.new(env_state, r_action, q_value)
                 #Helicopter take an action based on Rollout strategy and heuristic
                 observation, ro_cost, _, _ = self.env.step(r_action)
-                observation_1, h_cost, _, _ = self.env_h.step(h_action)
+                observation_h, h_cost, _, _ = self.env_h.step(h_action)
                 if RUN_GIF and (n_test == self.N_TRAIN - 1):
                     # Framing just the last round
                     self.env.frame(title="Rollout step {}-th".format(i))
@@ -598,31 +613,32 @@ class Experiment():
                 #Update Heuristic Total cost
                 heuristic_cost += h_cost
                 heuristic_cost_step.append(heuristic_cost)
+                #self.logger("Sync" if self.env.rg.random() == self.env_h.rg.random() else 'NotSync')
                 #Generate a message
                 msg =    " |   |      |"
                 msg += "\n |   |      |-- Agent step {}".format(i)
                 msg += "\n |   |      |   |-- Rollout with action {} and cost : {}".format(r_action, ro_cost)
                 msg += "\n |   |      |   '-- Heuristic with action {} and cost : {}".format(h_action, h_cost)
                 bar.write(msg)
+                self.logger(msg, False, False)
             bar.close()
             msg =    " |   |"
             msg += "\n |   |-- Test {} results".format(n_test+1)
             msg += "\n |       |-- Total Rollout cost : {}".format(rollout_cost)
             msg += "\n |       '-- Total Heuristic cost : {}".format(heuristic_cost)
             msg += "\n |"
-            print(msg)
+            self.logger(msg)
             #Costs p/test
             RO_RESULTS.append(rollout_cost)
             H_RESULTS.append(heuristic_cost)
             #Cumulative costs p/test
             RO_RESULTS_C.append(rollout_cost_step)
             H_RESULTS_C.append(heuristic_cost_step)
-        msg = " |"
-        msg+= "Run {} done.".format(self.c_runs)
+        msg = " | Run {} done.".format(self.c_runs)
         msg+= "\nMetadata: alpha-{} epsilon-{} epsilon_decay-{} k-{} LH-{} n_samples-{}".format(
                 self.alpha, self.epsilon_op, self.epsilon_decay, self.K, self.LOOKAHEAD, self.N_SAMPLES)
-        print(msg)
-        print("Total run time %.2f s"%(time.time()-start))
+        self.logger(msg, time=False)
+        self.logger("Total run time %.2f s"%(time.time()-start))
 
         # Saving to the class
         self.runs_rollout_results += RO_RESULTS
@@ -688,17 +704,17 @@ class Experiment():
             RUN_GIF = GIF
         else:
             RUN_GIF = self.RUN_GIF
-        print("Testing policy. Metadata: epsilon-{} k-{} LH-{} n_test-{} n_steps-{}".format(
-                EPSILON, self.K, self.LOOKAHEAD, N_TEST, N_STEPS))
-        print(" |")
+        self.logger("Testing policy. Metadata: epsilon-{} k-{} LH-{} n_test-{} n_steps-{}".format(
+                EPSILON, self.K, self.LOOKAHEAD, N_TEST, N_STEPS), time=False)
+        self.logger(" |")
         # Reseting env and storing the initial observations
         observation = self.env.reset()
-        observation_1 = observation
+        observation_h = observation
         #Making copy of the env to apply the heuristic
         self.env_h = self.env.copy()
         # Making checkpoints
-        checkpoint_env = self.env.make_checkpoint()
-        checkpoint_env_h = self.env_h.make_checkpoint()
+        #checkpoint_env = self.env.make_checkpoint()
+        #checkpoint_env_h = self.env_h.make_checkpoint()
         # Lists to save the results from the N_TRAIN
         RO_RESULTS=[]
         H_RESULTS=[]
@@ -710,14 +726,17 @@ class Experiment():
         start = time.time()
         # First loop to execute an rollout experiment.
         for n_test in range(N_TEST):
+            M_SEED = int(self.rg.random()*10**4)
+            self.env.rg = np.random.Generator(np.random.SFC64(M_SEED))
+            self.env_h.rg = np.random.Generator(np.random.SFC64(M_SEED))
             if EPSILON is None:
                 epsilon = self.epsilon_op
             else:
                 epsilon = EPSILON        
-            print(" |-- Test : {} of {}".format(n_test+1, N_TEST))
+            self.logger(" |-- Test : {} of {}".format(n_test+1, N_TEST))
             # Making a checkpoint from the initial state generated.         
-            self.env.load_checkpoint(checkpoint_env)
-            self.env_h.load_checkpoint(checkpoint_env_h)
+            #self.env.load_checkpoint(checkpoint_env)
+            #self.env_h.load_checkpoint(checkpoint_env_h)
             # Setting up vars to store costs
             rollout_cost=0
             heuristic_cost=0
@@ -751,11 +770,11 @@ class Experiment():
                 #Calls Heuristic and return best action
                 To_H = self.H_args.copy()
                 To_H['env'] = self.env_h
-                To_H['observation'] = observation_1
+                To_H['observation'] = observation_h
                 h_action = self.H(To_H)
                 #Helicopter take an action based on Rollout strategy and heuristic
                 observation, ro_cost, _, _ = self.env.step(action)
-                observation_1, h_cost, _, _ = self.env_h.step(h_action)
+                observation_h, h_cost, _, _ = self.env_h.step(h_action)
                 if RUN_GIF:
                     title = "Test {} - ".format(n_test + 1)
                     title += s
@@ -772,25 +791,28 @@ class Experiment():
                 msg += "\n |   |      |   |-- Rollout with action {} and cost : {}. Mode {}".format(action, ro_cost, s)
                 msg += "\n |   |      |   '-- Heuristic with action {} and cost : {}".format(h_action, h_cost)
                 bar.write(msg)
+                self.logger(msg, False, False)
             bar.close()
             msg =    " |   |"
-            msg += "\n |   |-- Test {} results".format(n_test+1)
+            msg += "\n |   '-- Test {} results".format(n_test+1)
             msg += "\n |       |-- Total Rollout cost : {}".format(rollout_cost)
             msg += "\n |       '-- Total Heuristic cost : {}".format(heuristic_cost)
             msg += "\n |"
-            print(msg)
+            self.logger(msg)
             #Costs p/test
             RO_RESULTS.append(rollout_cost)
             H_RESULTS.append(heuristic_cost)
             #Cumulative costs p/test
             RO_RESULTS_C.append(rollout_cost_step)
             H_RESULTS_C.append(heuristic_cost_step)
-        msg = " |"
-        msg+= "Test done. Metadata: epsilon-{} k-{} LH-{} n_test-{} n_steps-{}".format(
+            # Reseting the environment
+            observation = self.env.reset()
+            obvservation_h = self.env_h.reset()
+        msg = " | Test done. Metadata: epsilon-{} k-{} LH-{} n_test-{} n_steps-{}".format(
                 EPSILON, self.K, self.LOOKAHEAD, N_TEST, N_STEPS)
-        print(msg)
-        print("Percentage of successful calls to policy: %.2f"%(pi_calls/calls*100))
-        print("Total run time %.2f s"%(time.time()-start))
+        self.logger(msg, time=False)
+        self.logger("Percentage of successful calls to policy: %.2f"%(pi_calls/calls*100), time=False)
+        self.logger("Total run time %.2f s"%(time.time()-start))
         # Saving to the class
         self.runs_rollout_results += RO_RESULTS
         self.runs_rollout_results_step += RO_RESULTS_C
@@ -848,7 +870,7 @@ class Experiment():
         # Cost per test
         R_RESULTS_TEST = np.array(self.runs_rollout_results)
         H_RESULTS_TEST = np.array(self.runs_heu_results) 
-        x = range(len(self.runs_rollout_results))
+        x = range(1, len(self.runs_rollout_results)+1)
         plt.plot(x, R_RESULTS_TEST, label='Rollout')
         plt.plot(x, H_RESULTS_TEST, label='Heuristic')
         plt.xlabel('Test')
@@ -888,7 +910,7 @@ class Experiment():
         Experiment.check_dir("Runs")
         time_s = Experiment.time_str()
         if RUN and (self.theres_run_gif):
-            print("Creating gif for runs. This may take a while.")
+            self.logger("Creating gif for runs. This may take a while.")
             imageio.mimsave("./Runs/Helicopter Rollout Run alpha-{} epsilon-{} epsilon_decay-{} k-{} LH-{} n_samples-{} -- {}.gif".format(
                 self.alpha, self.epsilon_op, self.epsilon_decay, self.K, self.LOOKAHEAD, self.N_SAMPLES, time_s), 
                 self.frames_run_r, fps=fps)
@@ -900,16 +922,111 @@ class Experiment():
                 self.frames_run_h, fps=fps)
             self.frames_run_h = []
             self.theres_run_gif = False
-            print("Run gif. Done!")
+            self.logger("Run gif. Done!\n")
         if TEST and self.theres_test_gif:
-            print("Creating gif for tests. This may take a while.")
+            self.logger("Creating gif for tests. This may take a while.")
             imageio.mimsave("./Runs/Helicopter Rollout Test alpha-{} epsilon-{} epsilon_decay-{} k-{} LH-{} n_samples-{} -- {}.gif".format(
                 self.alpha, self.epsilon_op, self.epsilon_decay, self.K, self.LOOKAHEAD, self.N_SAMPLES, time_s),
                 self.frames_test_r, fps=fps)
             self.frames_test_r = []
             self.theres_test_gif = False
-            print("Test gif. Done!")
+            self.logger("Test gif. Done!\n")
         return None
+    
+    def save_policy(self, name_out=None):
+        """
+        Saves the actual policy object in a pickle dump file with extension .pi
+
+        Parameters
+        ----------
+        name_out: str
+            Name for the file, if default None then it generates a unique name
+        """
+        self.check_dir("Policies")
+        name = name_out
+        if name is None:
+            # Default name scheme
+            name = "Policy_Rollout Runs-{} alpha-{} epsilon-{} epsilon_decay-{} k-{} LH-{} n_samples-{} -- {}".format(
+                self.c_runs ,self.alpha, self.epsilon_op, self.epsilon_decay, self.K, self.LOOKAHEAD, self.N_SAMPLES, self.time_str())
+        file_h = open("./Policies/"+name+".pi",'wb')
+        pickle.dump(self.PI,file_h)
+        file_h.close()
+        self.logger("Policy saved under name {}\n".format(name))
+    
+    def load_policy(self, name_in=None, dir="./Policies"):
+        """
+        Loads a policy object from a pickle dump file with extension .pck
+
+        Parameters
+        ----------
+        name_in: str
+            Name for the file, if default None then it looks in the actual direction
+            for matching files and asks to chose one if available.
+        dir: str
+            If one wants to loook in another direction.
+        """
+        op_dir = os.getcwd()
+        if dir != "":
+            os.chdir(dir)
+        if name_in is None:
+            ls = os.listdir()
+            options = []
+            for s in ls:
+                if re.match(".+\.pi$",s):
+                    options += [s]
+            if len(options) > 0:
+                print("Please chose from the options")
+                for i,s in enumerate(options):
+                    print("| -- {} : {}\n\n".format(i,s))
+            else:
+                print("Folder {} has no .pi options".format(dir))
+                os.chdir(op_dir)
+                return None
+            while True:
+                choice = input("Enter option:")
+                choice = int(choice)
+                if choice < len(options):
+                    break
+            file_handler = open(options[choice], 'rb')
+            self.PI = pickle.load(file_handler)
+            file_handler.close()
+            self.logger("Policy {} loaded.\n".format(options[choice]))
+        else:
+            file_handler = open(name_in, 'rb')
+            self.PI = pickle.load(file_handler)
+            file_handler.close()
+            self.logger("Policy {} loaded.\n".format(name_in))
+        print(self.PI)
+
+    def logger(self, msg, prnt=True, time=True):
+        """
+        Just a method to save most of the print information in a file while the Experiment
+        exists.
+
+        Parameters
+        ----------
+        msg: str
+            The string generated to log.
+        prnt: bool
+            If true a message will be displayed.
+        time: bool
+            If true a time stamp will be added to the message in the log.
+        """
+        if self.init_logger == False:
+            self.check_dir("Logs")
+            self.logfile = open("./Logs/rollout_log_{}.txt".format(self.time_str()),'wt')
+            if prnt:
+                print(msg,end='\n')
+            if time:
+                msg += " -- @ {}".format(self.time_str())
+            self.logfile.write(msg+"\n")
+            return True
+        else:
+            if prnt:
+                print(msg,end="\n")
+            if time:
+                msg += " -- @ {}".format(self.time_str())
+            self.logfile.write(msg+"\n")   
 
     @staticmethod
     def time_str():
@@ -920,5 +1037,6 @@ class Experiment():
         assert isinstance(dir, str), "dir argument must be a string"
         ls = os.listdir(os.getcwd())
         if not dir in ls:
-            print("Creating a folder ./Runs")
+            print("Creating a folder {}".format(dir))
             os.mkdir(dir)
+        time.sleep(1)

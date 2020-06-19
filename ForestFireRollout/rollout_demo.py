@@ -10,7 +10,7 @@ Init_Row=7              #Helicopter initial row
 Init_Col=7              #Helicopter initial col
 P_FIRE = 0.02           #Probability to turn a green cell into ared cell
 P_TREE = 0.08           #Probability to turn an empty cell into a green cell
-FREEZE = 4              #Movements of Helicopter after update Automata
+FREEZE = 2              #Movements of Helicopter after update Automata
 # Symbols for cells
 TREE = 0
 FIRE = 2
@@ -24,10 +24,10 @@ C_HIT = -1.5            # Asociated to put down a fire.
 C_STEP = 0.0            # Per step given on the environment
 C_MOVE = 1.0            # Cost to chage position
 # Experiment parameters
-N_TRAIN = 1
-N_STEPS = 30
-N_SAMPLES = 15
-K_Rollout = 5 * FREEZE
+N_TRAIN = 10
+N_STEPS = 25
+N_SAMPLES = 10
+K_Rollout = 1 * FREEZE
 LOOKAHEAD = 1
 
 if __name__ == '__main__':
@@ -46,12 +46,11 @@ if __name__ == '__main__':
         K=K_Rollout, LOOKAHEAD=LOOKAHEAD, MIN_OBJECTIVE=True, 
         N_WORKERS=-1, RUN_GIF=True)
     exp.run()
-    #exp.make_gif(RUN=True,fps=7)
+    exp.make_gif(RUN=True,fps=7)
     exp.LOOKAHEAD = 2
     exp.run()
-    #exp.LOOKAHEAD = 3
-    #exp.run()
-    #exp.make_gif(RUN=True,fps=7)
-    #exp.policy_test(N_TEST=5,N_STEPS=N_STEPS)
-    #exp.make_gif(TEST=True,fps=7)
-     
+    exp.make_gif(RUN=True,fps=7)
+    exp.policy_test(N_TEST=5,N_STEPS=N_STEPS)
+    exp.make_gif(TEST=True,fps=7)
+    exp.save_policy()
+    exp.load_policy()
