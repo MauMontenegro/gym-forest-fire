@@ -621,8 +621,8 @@ class Experiment():
             H_RESULTS_C.append(heuristic_cost_step)
         msg = " |"
         msg+= "Run {} done.".format(self.c_runs)
-        msg+= "\n Metadata: alpha-{} epsilon-{} epsilon_decay-{} k-{} LH-{} n_samples-{}".format(
-            self.c_runs, self.alpha, self.epsilon_op, self.epsilon_decay, self.K, self.LOOKAHEAD, self.N_SAMPLES)
+        msg+= "\nMetadata: alpha-{} epsilon-{} epsilon_decay-{} k-{} LH-{} n_samples-{}".format(
+                self.alpha, self.epsilon_op, self.epsilon_decay, self.K, self.LOOKAHEAD, self.N_SAMPLES)
         print(msg)
         print("Total run time %.2f s"%(time.time()-start))
 
@@ -892,7 +892,7 @@ class Experiment():
         if RUN and (self.theres_run_gif):
             print("Creating gif for runs. This may take a while.")
             imageio.mimsave("./Runs/Helicopter Rollout Run alpha-{} epsilon-{} epsilon_decay-{} k-{} LH-{} n_samples-{} -- {}.gif".format(
-                self.alpha, self.epsilon_op, self.epsilon_decay, self.K, self.N_SAMPLES, self.LOOKAHEAD, time_s), 
+                self.alpha, self.epsilon_op, self.epsilon_decay, self.K, self.LOOKAHEAD, self.N_SAMPLES, time_s), 
                 self.frames_run_r, fps=fps)
             self.frames_run_r = []
             heu_par = ''

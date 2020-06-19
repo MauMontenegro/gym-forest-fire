@@ -34,77 +34,92 @@ class R_ITER():
     """
     
     def __init__(self, env, H, N_workers, alpha, K, lookahead, 
-                N_samples, Action_set=None, H_args=None, Min_obj=True):
-        self.env = env
-        self.H_ref = H
-        self.Min_obj = Min_obj
-        self.cpus = N_workers
-        self.alpha = alpha
-        if Action_set is None:
-            Action_set = env.action_set
-        assert isinstance(Action_set, (list, set)), "Action_set variable must be a list or set. {} was given".format(type(Action_set))
-        self.actions = list(Action_set)
-        self.actions_c = len(self.actions)
-        self.K = K
-        self.lookahead = lookahead
-        self.N_samples = N_samples
-        self.H_args = H_args
-        self.chuncks = math.ceil(self.actions_c / self.cpus) # Size of chuncks
-        self.j = lookahead - 1
-        self.max_index = []
-        self.t_pos = []
-        for _ in range(self.lookahead):
-            self.t_pos += [0]
-            self.max_index += [self.actions_c - 1]
-        self.t_pos[self.lookahead - 1] = -1 # A quick fix.
+                    N_samples, Action_set=None, H_args=None, Min_obj=True):
+            self.env = env
+            self.H_ref = H
+            self.Min_obj = Min_obj
+            self.cpus = N_workers
+            self.alpha = alpha
+            if Action_set is None:
+                Action_set = env.action_set
+            assert isinstance(Action_set, (list, set)), "Action_set variable must be a list or set. {} was given".format(type(Action_set))
+            self.actions = list(Action_set)
+            self.actions_c = len(self.actions)
+            self.K = K
+            self.lookahead = lookahead
+            self.N_samples = N_samples
+            self.H_args = H_args
+            self.chunks = math.ceil(self.actions_c**lookahead / self.cpus) # Size of chuncks
+            self.j = lookahead - 1
+            self.max_index = []
+            self.t_pos = []
+            for _ in range(self.lookahead):
+                self.t_pos += [0]
+                self.max_index += [self.actions_c - 1]
+            self.t_pos[self.lookahead - 1] = -1 # A quick fix.
+            self.all_trayectories = [] # Storing all trayectories. It's better to complextity to memory than
+                # to process it everytime
+            self.done = self._construct_
+            self.i = 0  
+    @property
+    def _construct_(self):
+        self.is_constructed = False
+        while not self.is_constructed:
+            chunck_trayectories = []
+            for _ in range(self.chunks):
+                branch = []
+                self._update_iter_
+                if self.is_constructed:
+                    break
+                else:
+                    for pos in self.t_pos:
+                        branch += [self.actions[pos]]
+                    chunck_trayectories += [branch]
+            self.all_trayectories += [chunck_trayectories]
+        return True
 
-    def __iter__(self):
-        # iterable method
-        for j in range(len(self.t_pos)):
-            self.t_pos[j] = 0
-        self.t_pos[self.lookahead - 1] = -1 # A quick fix.
-        self.j = self.lookahead - 1
-        return self
-
-    def __next__(self):
-        chunck_trayectories = []
-        for _ in range(self.chuncks):
-            branch = []
-            self._update_iter_()
-            for pos in self.t_pos:
-                branch += [self.actions[pos]]
-            chunck_trayectories += [branch.copy()]
-
-        To_H = {
-                'env': self.env.copy(), # Always a new copy of the environment. This is a new object.
-                'H':self.H_ref,
-                'trayectories':chunck_trayectories.copy(),
-                'alpha':self.alpha,
-                'K':self.K,
-                'N_SAMPLES':self.N_samples,
-                'H_args':self.H_args,
-                'min_obj':self.Min_obj,
-        }
-        return To_H
-
-    def __del__(self):
-        return None
-
+    @property
     def _update_iter_(self):
         # A recursive counter
         if self.j < 0:
             # Done
-            raise StopIteration
+            self.is_constructed = True
         elif self.t_pos[self.j] < self.max_index[self.j]:
             # This case is when there are still branches to 
             # visit in this level
             self.t_pos[self.j] += 1
             self.j = self.lookahead - 1
-            return None
         else:
             self.t_pos[self.j] = 0
             self.j -= 1
-            return None
+            self._update_iter_
+
+    def __iter__(self):
+        # iterable method
+        if not self.done:
+            self.done = self._construct_
+        self.i = 0
+        return self
+
+    def __next__(self):
+        if self.i == self.cpus:
+            raise StopIteration
+        else:
+            To_H = {
+                    'env': self.env.copy(), # Always a new copy of the environment. This is a new object.
+                    'H':self.H_ref,
+                    'trayectories':self.all_trayectories[self.i],
+                    'alpha':self.alpha,
+                    'K':self.K,
+                    'N_SAMPLES':self.N_samples,
+                    'H_args':self.H_args,
+                    'min_obj':self.Min_obj,
+            }
+            self.i += 1
+            return To_H
+
+    def __del__(self):
+        return None
 
 def sample_trayectory(args):
     """
