@@ -21,12 +21,7 @@ import time
 import matplotlib.pyplot as plt
 import imageio
 
-# Still working on it
-# Import this core file until the end, this one does funny things
-# Tries to compile what's next into Cython
-import pyximport
-pyximport.install(inplace=True, pyimport=True, setup_args={"include_dirs":np.get_include()})
-#Importing and compiling the sampler
+#Importing the sampler
 from rollout_sampler import sample_trayectory, R_ITER
 
 class Policy(object):
@@ -251,8 +246,11 @@ def Rollout(
         parallel = False
     elif cpus > 1:
         parallel = True
+        if lookahead == 1:
+            cpus = len(env.action_set) 
     else:
         raise "Something went wrong! {} is an invalid workers number!".format(cpus)
+    
     objective = 1
     if not min_objective:
         # The default program is wrote to minimize.
