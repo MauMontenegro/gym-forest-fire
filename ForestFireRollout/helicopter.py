@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
 Created on Mon Apr 20 18:57:09 2020
@@ -61,12 +60,14 @@ class Helicopter(ForestFire):
             self.pos_col = self.n_col//2
         else:
             self.pos_col = init_pos_col
+        self.last_move = False
         # RWH. New added variables for new functions.
         self.checkpoints = []
         self.checkpoint_counter = 0
         self.frames = [] # Potential high memory usage
 
     def new_pos(self, movement):
+        a = (self.pos_row, self.pos_col)
         self.pos_row = self.pos_row if movement == 5\
             else self.pos_row if self.is_out_borders(movement, pos='row')\
             else self.pos_row - 1 if movement in [1,2,3]\
@@ -77,7 +78,12 @@ class Helicopter(ForestFire):
             else self.pos_col - 1 if movement in [1,4,7]\
             else self.pos_col + 1 if movement in [3,6,9]\
             else self.pos_col
-        return (self.pos_row, self.pos_col)   
+        b = (self.pos_row, self.pos_col)
+        if not a == b:
+            self.last_move = True
+        else:
+            self.last_move = False
+        return b
     def is_out_borders(self, movement, pos):
         out_of_border=False
         if pos == 'row':
@@ -447,8 +453,8 @@ class EnvMakerForestFire(Helicopter):
                  n_row = 16, n_col = 16, p_tree = 0.300, p_fire = 0.003, custom_grid = None,
                  init_pos_row = None, init_pos_col = None, moves_before_updating = None,
                  termination_type = None, steps_to_termination = None, fire_threshold = None,
-                 reward_type = 'custom', reward_tree = -3.0, reward_fire = 1.0, reward_empty = 0.0, 
-                 reward_hit = -0.10, reward_step = 0.20, tree = 0, empty = 1, fire = 2, rock = 3, lake = 4, 
+                 reward_type = 'custom', reward_tree = -3.0, reward_fire = 1.0, reward_empty = 0.2, 
+                 reward_hit = -0.20, reward_step = 1.0, reward_move = 0.0, tree = 0, empty = 1, fire = 2, rock = 3, lake = 4, 
                  observation_mode = 'one_hot', sub_tree = None, sub_empty = None, sub_fire = None, 
                  sub_rock = None, sub_lake = None, ip_tree = None, ip_empty = None, ip_fire = None, 
                  ip_rock = None, ip_lake = None,pos_row=None,pos_col=None,
@@ -493,6 +499,7 @@ class EnvMakerForestFire(Helicopter):
         self.reward_empty = reward_empty
         self.reward_hit = reward_hit
         self.reward_step = reward_step
+        self.reward_move = reward_move
 
         # Grid Observations and One Hot Encoding
         self.observation_mode = observation_mode
@@ -692,9 +699,8 @@ class EnvMakerForestFire(Helicopter):
             # Do a less impact of having a tree to motivate the 
             # no fire policy, but not much to let all the trees catch fire
             reward += self.hit * self.reward_hit
-            # Each step adds cost, not much, but to add motivate the behavior
-            # of rushing.
-            reward += self.steps * self.reward_step
+            reward += self.cell_counts[self.empty] * self.reward_empty
+            reward += self.reward_move if self.last_move else 0
         else:
             raise ValueError('Unrecognized reward type')
         return reward
@@ -766,6 +772,7 @@ class EnvMakerForestFire(Helicopter):
         NEW.remaining_moves = self.remaining_moves
         NEW.first_termination = self.first_termination
         NEW.terminated = self.terminated
+        NEW.last_move = self.last_move
         NEW.effects_dict = self.effects_dict.copy()
         #NEW.checkpoints = self.checkpoints.copy()
         #NEW.checkpoint_counter = self.checkpoint_counter
@@ -776,7 +783,7 @@ class EnvMakerForestFire(Helicopter):
         self.checkpoints.append((
             self.grid.copy(), self.pos_row, self.pos_col, self.total_hits, self.total_reward, 
             self.remaining_moves, self.steps_to_termination, self.first_termination, self.total_burned,
-            self.terminated, self.steps
+            self.terminated, self.steps, self.last_move
             ))
         self.checkpoint_counter += 1
         return self.checkpoint_counter - 1
@@ -788,7 +795,7 @@ class EnvMakerForestFire(Helicopter):
         try:
             self.grid, self.pos_row, self.pos_col, self.total_hits, self.total_reward, \
             self.remaining_moves, self.steps_to_termination, self.first_termination, self.total_burned, \
-            self.terminated, self.steps = self.checkpoints[checkpoint_id]
+            self.terminated, self.steps, self.last_move = self.checkpoints[checkpoint_id]
             return True
         except:
             raise "checkpoint_id references to an ill checkpoint. Sorry."

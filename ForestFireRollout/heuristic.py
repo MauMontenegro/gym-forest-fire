@@ -1,3 +1,9 @@
+# -*- coding: utf-8 -*-
+"""
+Created on jun 2020
+
+@author: MauMontenegro
+"""
 import numpy as np
 import random
 
@@ -166,3 +172,24 @@ def ExpandGrid(grid,vision):
         PadGrid2 = np.zeros((size[0]+2*vision,size[1]+2*vision), dtype=np.int16)
         PadGrid2[vision:-vision,vision:-vision] = PadGrid
         return PadGrid2
+
+def DUMB_ONE(args):
+    assert isinstance(args, dict), "This function requieres a dict of kwards to perform. Please provide one."
+    expected_args = ['env']
+    for arg in expected_args:
+        if args.get(arg) is None:
+            raise "At least the argument {} is missing! Please do pass correct arguments".format(arg)
+    env = args['env']
+    actions = env.action_set
+    return actions[0]
+
+def potential_one(args):
+    assert isinstance(args, dict), "This function requieres a dict of kwards to perform. Please provide one."
+    expected_args = ['env','observation']
+    for arg in expected_args:
+        if args.get(arg) is None:
+            raise "At least the argument {} is missing! Please do pass correct arguments".format(arg)
+    env = args['env']
+    grid, pos, remain_steps = args['observation']
+
+    return None

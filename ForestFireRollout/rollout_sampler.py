@@ -1,3 +1,9 @@
+# -*- coding: utf-8 -*-
+"""
+Created on jun 2020
+
+@author: bobobert
+"""
 # Rob was here
 
 import math

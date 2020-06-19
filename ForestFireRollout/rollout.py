@@ -1,3 +1,10 @@
+# -*- coding: utf-8 -*-
+"""
+Created on jun 2020
+
+@author: bobobert, MauMontenegro
+"""
+
 # Rob was here, so did Mau
 
 # Math
@@ -525,7 +532,8 @@ class Experiment():
             RUN_GIF = GIF
         else:
             RUN_GIF = self.RUN_GIF
-        print("Run {}".format(self.c_runs))
+        print("Run {} - Metadata: alpha-{} epsilon-{} epsilon_decay-{} k-{} LH-{} n_samples-{}".format(
+            self.c_runs, self.alpha, self.epsilon_op, self.epsilon_decay, self.K, self.LOOKAHEAD, self.N_SAMPLES))
         print(" |")
         # Reseting env and storing the initial observations
         observation = self.env.reset()
@@ -613,6 +621,8 @@ class Experiment():
             H_RESULTS_C.append(heuristic_cost_step)
         msg = " |"
         msg+= "Run {} done.".format(self.c_runs)
+        msg+= "\n Metadata: alpha-{} epsilon-{} epsilon_decay-{} k-{} LH-{} n_samples-{}".format(
+            self.c_runs, self.alpha, self.epsilon_op, self.epsilon_decay, self.K, self.LOOKAHEAD, self.N_SAMPLES)
         print(msg)
         print("Total run time %.2f s"%(time.time()-start))
 
@@ -680,7 +690,8 @@ class Experiment():
             RUN_GIF = GIF
         else:
             RUN_GIF = self.RUN_GIF
-        print("Testing policy")
+        print("Testing policy. Metadata: epsilon-{} k-{} LH-{} n_test-{} n_steps-{}".format(
+                EPSILON, self.K, self.LOOKAHEAD, N_TEST, N_STEPS))
         print(" |")
         # Reseting env and storing the initial observations
         observation = self.env.reset()
@@ -777,7 +788,8 @@ class Experiment():
             RO_RESULTS_C.append(rollout_cost_step)
             H_RESULTS_C.append(heuristic_cost_step)
         msg = " |"
-        msg+= "Test done."
+        msg+= "Test done. Metadata: epsilon-{} k-{} LH-{} n_test-{} n_steps-{}".format(
+                EPSILON, self.K, self.LOOKAHEAD, N_TEST, N_STEPS)
         print(msg)
         print("Percentage of successful calls to policy: %.2f"%(pi_calls/calls*100))
         print("Total run time %.2f s"%(time.time()-start))
